@@ -12,12 +12,12 @@ services:
       - backend
 
   frontend:
-    image: YOUR_DOCKERHUB_USERNAME/frontend:latest
+    image: niharpatel0011/frontend:latest
     depends_on:
       - backend
 
   backend:
-    image: YOUR_DOCKERHUB_USERNAME/backend:latest
+    image: niharpatel0011/backend:latest
     environment:
       MONGO_URL: mongodb://mongodb:27017/studentdb
     depends_on:
@@ -30,3 +30,4 @@ services:
 
 volumes:
   mongo-data:
+
