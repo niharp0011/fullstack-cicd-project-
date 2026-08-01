@@ -85,4 +85,8 @@ jobs:
             sudo docker compose down || true
             sudo docker compose up -d
 
+<<<<<<< HEAD
             sudo docker image prune -af
+=======
+            sudo docker image prune -af
+>>>>>>> 554a799485be933339b996a77eb81781ffa75146
