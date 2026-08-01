@@ -49,12 +49,40 @@ jobs:
           username: ${{ secrets.AWS_USERNAME }}
           key: ${{ secrets.AWS_PRIVATE_KEY }}
           script: |
-            export PATH=$PATH:/usr/local/bin:/usr/bin:/snap/bin
+            set -e
+
+            sudo apt-get update
+
+            # Install Docker
+            if ! command -v docker >/dev/null 2>&1; then
+              sudo apt-get install -y docker.io
+              sudo systemctl enable docker
+              sudo systemctl start docker
+            fi
+
+            # Install Docker Compose plugin
+            if ! docker compose version >/dev/null 2>&1; then
+              sudo apt-get install -y docker-compose-v2 || true
+
+              if ! docker compose version >/dev/null 2>&1; then
+                sudo mkdir -p /usr/local/lib/docker/cli-plugins
+                sudo curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
+                  -o /usr/local/lib/docker/cli-plugins/docker-compose
+                sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+              fi
+            fi
+
             mkdir -p /home/ubuntu/app
             cd /home/ubuntu/app
-            docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
-            docker pull ${{ secrets.DOCKER_USERNAME }}/frontend:latest
-            docker pull ${{ secrets.DOCKER_USERNAME }}/backend:latest
-            docker compose down
-            docker compose up -d
-            docker image prune -f
+
+            sudo docker login \
+              -u ${{ secrets.DOCKER_USERNAME }} \
+              -p ${{ secrets.DOCKER_PASSWORD }}
+
+            sudo docker pull ${{ secrets.DOCKER_USERNAME }}/frontend:latest
+            sudo docker pull ${{ secrets.DOCKER_USERNAME }}/backend:latest
+
+            sudo docker compose down || true
+            sudo docker compose up -d
+
+            sudo docker image prune -af
