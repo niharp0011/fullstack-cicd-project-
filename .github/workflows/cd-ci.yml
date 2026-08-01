@@ -52,6 +52,18 @@ jobs:
             export PATH=$PATH:/usr/local/bin:/usr/bin:/snap/bin
             mkdir -p /home/ubuntu/app
             cd /home/ubuntu/app
+
+            if ! command -v docker &> /dev/null; then
+              echo "Docker not found. Installing..."
+              sudo apt-get update
+              sudo apt-get install -y docker.io || sudo apt-get install -y docker
+              sudo systemctl enable docker
+              sudo systemctl start docker
+              sudo usermod -aG docker $USER
+            else
+              echo "Docker already installed."
+            fi
+
             docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
             docker pull ${{ secrets.DOCKER_USERNAME }}/frontend:latest
             docker pull ${{ secrets.DOCKER_USERNAME }}/backend:latest
