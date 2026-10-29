@@ -5,113 +5,92 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout source code
-      - name: Checkout code
-        uses: actions/checkout@v4
+      # Checkout repository
+      - name: Checkout Repository
+        uses: actions/checkout@v5
 
-      # Step 2: Login to Docker Hub
+      # Login to Docker Hub
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # Step 3: Build and push frontend
-      - name: Build and push frontend image
+      # Build & Push Frontend Image
+      - name: Build and Push Frontend
         uses: docker/build-push-action@v6
         with:
           context: ./frontend
+          file: ./frontend/Dockerfile
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/frontend:latest
 
-      # Step 4: Build and push backend
-      - name: Build and push backend image
+      # Build & Push Backend Image
+      - name: Build and Push Backend
         uses: docker/build-push-action@v6
         with:
           context: ./backend
+          file: ./backend/Dockerfile
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/backend:latest
 
-      # Step 5: Copy deployment files to EC2
-      - name: Copy files to EC2
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.AWS_HOST }}
-          username: ${{ secrets.AWS_USERNAME }}
-          key: ${{ secrets.AWS_PRIVATE_KEY }}
-          source: "docker-compose.yml,nginx/default.conf"
-          target: "/home/ubuntu/app"
-
-      # Step 6: Deploy application
-      - name: Deploy to EC2
-        uses: appleboy/ssh-action@v1.0.3
+      # Create destination directory
+      - name: Create Application Directory
+        uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.AWS_HOST }}
           username: ${{ secrets.AWS_USERNAME }}
           key: ${{ secrets.AWS_PRIVATE_KEY }}
           script: |
-            set -eu
-
-            # Install Docker if missing
-            if ! command -v docker >/dev/null 2>&1; then
-              sudo apt-get update
-              sudo apt-get install -y docker.io
-            fi
-
-            sudo systemctl enable --now docker
-
-            # Install Docker Compose plugin
-            if ! sudo docker compose version >/dev/null 2>&1; then
-              sudo apt-get update
-              sudo apt-get install -y docker-compose-v2
-            fi
-
-            # Verify required tools
-            sudo docker --version
-            sudo docker compose version
-
-            # Check available disk space
-            df -h /
-            df -h /var/lib/docker
-
-            # Stop if root filesystem has less than 2 GB free
-            FREE_KB=$(df -Pk / | awk 'NR==2 {print $4}')
-            if [ "$FREE_KB" -lt 2097152 ]; then
-              echo "ERROR: Less than 2 GB disk space available."
-              echo "Free disk space or increase the EC2 EBS volume."
-              exit 1
-            fi
-
-            # Prepare deployment directory
             mkdir -p /home/ubuntu/app
+            mkdir -p /home/ubuntu/app/nginx
+
+      # Copy docker-compose.yml
+      - name: Copy Docker Compose
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.AWS_HOST }}
+          username: ${{ secrets.AWS_USERNAME }}
+          key: ${{ secrets.AWS_PRIVATE_KEY }}
+          source: "docker-compose.yml"
+          target: "/home/ubuntu/app"
+
+      # Copy nginx config
+      - name: Copy Nginx Config
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.AWS_HOST }}
+          username: ${{ secrets.AWS_USERNAME }}
+          key: ${{ secrets.AWS_PRIVATE_KEY }}
+          source: "nginx/default.conf"
+          target: "/home/ubuntu/app"
+
+      # Deploy
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.AWS_HOST }}
+          username: ${{ secrets.AWS_USERNAME }}
+          key: ${{ secrets.AWS_PRIVATE_KEY }}
+          script: |
             cd /home/ubuntu/app
 
-            # Login securely to Docker Hub
-            printf '%s' '${{ secrets.DOCKER_PASSWORD }}' | \
-              sudo docker login \
-                --username '${{ secrets.DOCKER_USERNAME }}' \
-                --password-stdin
+            echo "${{ secrets.DOCKER_PASSWORD }}" | docker login \
+              -u "${{ secrets.DOCKER_USERNAME }}" \
+              --password-stdin
 
-            # Pull application images
-            sudo docker pull \
-              ${{ secrets.DOCKER_USERNAME }}/frontend:latest
+            docker pull ${{ secrets.DOCKER_USERNAME }}/frontend:latest
+            docker pull ${{ secrets.DOCKER_USERNAME }}/backend:latest
 
-            sudo docker pull \
-              ${{ secrets.DOCKER_USERNAME }}/backend:latest
+            docker compose down || true
+            docker compose up -d
 
-            # Validate Compose configuration
-            sudo docker compose config -q
-
-            # Start updated application
-            sudo docker compose up -d --remove-orphans
-
-            # Verify deployment
-            sudo docker compose ps
-            sudo docker ps
-
-            echo "Deployment completed successfully!"
+            docker image prune -af
